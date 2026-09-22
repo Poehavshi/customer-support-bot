@@ -154,9 +154,10 @@ def test_report_has_a_section_per_file_and_a_combined_section(tmp_path: Path) ->
 
     text = report.read_text()
     assert report.parent == tmp_path / "reports"
-    assert "book.jsonl" in text
-    assert "escalation.jsonl" in text
-    assert "Combined" in text
+    scores = text.split("## Scores")[1].split("## Failed scenarios")[0]
+    assert "| Combined | 2 |" in scores
+    assert "| book.jsonl | 1 |" in scores
+    assert "| escalation.jsonl | 1 |" in scores
     assert "- Model: `claude-opus-5`" in text
     assert "- Effort: `high`" in text
     # The modify Scenario failed: its expected and predicted calls appear in the failure table.

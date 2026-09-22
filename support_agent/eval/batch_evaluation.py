@@ -67,7 +67,7 @@ def load_graph(path: Path) -> GraphFactory:
     ``construct_graph(store)`` is preferred so the graph shares the seeded store; a
     module-level ``graph`` is accepted for the book's original contract.
     """
-    spec = importlib.util.spec_from_file_location("user_graph", path)
+    spec = importlib.util.spec_from_file_location("agent_graph", path)
     if spec is None or spec.loader is None:
         raise ImportError(f"cannot import {path}")
     mod = importlib.util.module_from_spec(spec)
