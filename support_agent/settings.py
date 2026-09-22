@@ -21,6 +21,8 @@ class Settings:
     anthropic_api_key: str | None
     anthropic_base_url: str | None
     database_url: str | None
+    model: str
+    effort: str
 
 
 def load_settings(env_file: Path = DEFAULT_ENV_FILE) -> Settings:
@@ -30,4 +32,6 @@ def load_settings(env_file: Path = DEFAULT_ENV_FILE) -> Settings:
         anthropic_api_key=values.get("ANTHROPIC_API_KEY"),
         anthropic_base_url=values.get("ANTHROPIC_BASE_URL"),
         database_url=values.get("DATABASE_URL"),
+        model=values.get("SUPPORT_AGENT_MODEL") or "claude-opus-5",
+        effort=values.get("SUPPORT_AGENT_EFFORT") or "default",
     )

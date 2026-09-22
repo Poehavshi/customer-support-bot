@@ -13,9 +13,11 @@ typecheck:
 test:
 	uv run pytest
 
-## Stub for a later ticket. Prints what it will do.
+## Run the evaluation harness over every scenario file and write a dated report under reports/.
+## GRAPH is the agent module; override with `make eval GRAPH=path/to/graph.py`.
+GRAPH ?= support_agent/agent/graph.py
 eval:
-	@echo "make eval: will run the evaluation harness over the scenario files and write a dated report under reports/."
+	uv run python -m support_agent.eval.batch_evaluation --graph_py $(GRAPH) --dataset support_agent/eval/scenarios/*.jsonl
 
 ## Apply the Order Store schema and upsert the scenario orders plus hand-written extras. Idempotent.
 seed:
