@@ -36,10 +36,11 @@ StoreFactory = Callable[[], OrderStore]
 
 @dataclass(frozen=True)
 class ScenarioResult:
-    sample_id: str
+    scenario_id: str
     expected: dict[str, Any]
     predicted: list[dict[str, Any]]
     scores: dict[str, float]
+    error: str | None = None
 
     @property
     def failed(self) -> bool:
@@ -74,6 +75,7 @@ def load_graph(path: Path) -> GraphFactory:
     if hasattr(mod, "construct_graph"):
         return mod.construct_graph
     if hasattr(mod, "graph"):
+        print(f"[WARN] {path} exposes only `graph`; the seeded Order Store is not shared with it")
         return lambda store: mod.graph
     raise AttributeError(f"{path} exposes neither `graph` nor `construct_graph()`")
 
@@ -85,15 +87,15 @@ def _text(message: AIMessage) -> str:
     return "".join(b.get("text", "") for b in content if isinstance(b, dict))
 
 
-def evaluate_scenario(ex: dict[str, Any], graph: Any) -> ScenarioResult:
-    messages = [to_lc_message(t) for t in ex["input"]]
-    expected_call = ex["expected_function_call"]
+def evaluate_scenario(scenario: dict[str, Any], graph: Any) -> ScenarioResult:
+    messages = [to_lc_message(t) for t in scenario["input"]]
+    expected_call = scenario["expected_function_call"]
     exp_final = {
         "tool_calls": [{"tool": expected_call["name"], "params": expected_call["arguments"]}],
         "customer_msg_contains": [],
     }
 
-    result = graph.invoke({"messages": messages, "order": ex["order"]})
+    result = graph.invoke({"messages": messages, "order": scenario["order"]})
 
     final_reply = ""
     for msg in reversed(result["messages"]):
@@ -101,19 +103,20 @@ def evaluate_scenario(ex: dict[str, Any], graph: Any) -> ScenarioResult:
             final_reply = _text(msg)
             break
 
-    pred_call_objs = [
-        {"tool": tc["name"], "params": tc["args"]}
+    predicted = [
+        {"name": tc["name"], "arguments": tc["args"]}
         for m in result["messages"]
         if isinstance(m, AIMessage)
         for tc in m.tool_calls
     ]
-    pred_tool_names = [c["tool"] for c in pred_call_objs]
+    pred_call_objs = [{"tool": c["name"], "params": c["arguments"]} for c in predicted]
+    pred_tool_names = [c["name"] for c in predicted]
 
     tm = tool_metrics(pred_tool_names, exp_final["tool_calls"])
     return ScenarioResult(
-        sample_id=ex["sample_id"],
+        scenario_id=scenario["sample_id"],
         expected=expected_call,
-        predicted=[{"name": c["tool"], "arguments": c["params"]} for c in pred_call_objs],
+        predicted=predicted,
         scores={
             "task_success": task_success(final_reply, pred_tool_names, exp_final),
             "tool_recall": tm["tool_recall"],
@@ -130,16 +133,22 @@ def evaluate_file(
     """Score every Scenario in ``path``, each against a fresh store seeded with its order."""
     scenarios = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
     results: list[ScenarioResult] = []
-    for i, ex in enumerate(scenarios, 1):
+    for i, scenario in enumerate(scenarios, 1):
         store = store_factory()
-        store.upsert(Order(**ex["order"]))
-        print(f"[{i}/{len(scenarios)}] {ex['sample_id']} ...", end=" ", flush=True)
+        store.upsert(Order(**scenario["order"]))
+        print(f"[{i}/{len(scenarios)}] {scenario['sample_id']} ...", end=" ", flush=True)
         try:
-            result = evaluate_scenario(ex, graph_factory(store))
-        except Exception as e:  # the book skips a failed Scenario and carries on
-            print(f"[SKIPPED] {e!r}", flush=True)
-            continue
-        print(json.dumps(result.scores), flush=True)
+            result = evaluate_scenario(scenario, graph_factory(store))
+        except Exception as e:
+            # The book skips a crashed Scenario; we score it 0 so the report shows what broke.
+            result = ScenarioResult(
+                scenario_id=scenario["sample_id"],
+                expected=scenario["expected_function_call"],
+                predicted=[],
+                scores=dict.fromkeys(METRICS, 0.0),
+                error=repr(e),
+            )
+        print(result.error or json.dumps(result.scores), flush=True)
         results.append(result)
     return results
 
@@ -152,11 +161,15 @@ def run(
     return {path: evaluate_file(path, graph_factory, store_factory) for path in files}
 
 
+def combined(results: dict[Path, list[ScenarioResult]]) -> list[ScenarioResult]:
+    return [r for rs in results.values() for r in rs]
+
+
 def aggregate(results: list[ScenarioResult]) -> dict[str, float]:
     return {m: stats.mean(r.scores[m] for r in results) for m in METRICS} if results else {}
 
 
-def _call(call: dict[str, Any]) -> str:
+def format_call(call: dict[str, Any]) -> str:
     return f"`{call['name']}({json.dumps(call['arguments'], sort_keys=True)})`"
 
 
@@ -168,14 +181,15 @@ def write_report(
     now: datetime | None = None,
 ) -> Path:
     now = now or datetime.now().astimezone()
-    combined = [r for rs in results.values() for r in rs]
-    sections = {"Combined": combined, **{path.name: rs for path, rs in results.items()}}
+    sections = {"Combined": combined(results), **{path.name: rs for path, rs in results.items()}}
 
     lines = [
         f"# Eval report {now:%Y-%m-%d %H:%M %Z}",
         "",
         f"- Model: `{model}`",
         f"- Effort: `{effort}`",
+        "- phrase_recall is always 1.0 and task_success floors at 0.5: the book's scenarios "
+        "carry no expected phrases.",
         f"- Scenario files: {', '.join(f'`{p}`' for p in results)}",
         "",
         "Scores are comparable with the book's only on the metric definitions, not on what "
@@ -197,13 +211,15 @@ def write_report(
     if failed:
         lines += ["| File | Scenario | Expected | Predicted |", "|---|---|---|---|"]
         for file, r in failed:
-            predicted = ", ".join(_call(c) for c in r.predicted) or "(no tool call)"
-            lines.append(f"| {file} | {r.sample_id} | {_call(r.expected)} | {predicted} |")
+            predicted = (
+                r.error or ", ".join(format_call(c) for c in r.predicted) or "(no tool call)"
+            )
+            lines.append(f"| {file} | {r.scenario_id} | {format_call(r.expected)} | {predicted} |")
     else:
         lines.append("None.")
 
     reports_dir.mkdir(parents=True, exist_ok=True)
-    report = reports_dir / f"{now:%Y-%m-%d-%H%M}.md"
+    report = reports_dir / f"{now:%Y-%m-%d-%H%M%S}.md"
     report.write_text("\n".join(lines) + "\n")
     return report
 
@@ -220,7 +236,7 @@ def main() -> None:
     report = write_report(results, settings.model, settings.effort, args.reports_dir)
 
     print("\n=== Aggregate scores ===")
-    for m, value in aggregate([r for rs in results.values() for r in rs]).items():
+    for m, value in aggregate(combined(results)).items():
         print(f"{m:15s}: {value:.3f}")
     print(f"\nReport: {report}")
 

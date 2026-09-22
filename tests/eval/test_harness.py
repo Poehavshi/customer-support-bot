@@ -157,8 +157,8 @@ def test_report_has_a_section_per_file_and_a_combined_section(tmp_path: Path) ->
     assert "book.jsonl" in text
     assert "escalation.jsonl" in text
     assert "Combined" in text
-    assert "claude-opus-5" in text
-    assert "high" in text
+    assert "- Model: `claude-opus-5`" in text
+    assert "- Effort: `high`" in text
     # The modify Scenario failed: its expected and predicted calls appear in the failure table.
     assert "modify_2" in text
     assert "modify_order" in text
@@ -187,3 +187,16 @@ def test_load_graph_prefers_construct_graph_and_falls_back_to_graph(tmp_path: Pa
 
     assert load_graph(with_construct)(store) == ("built", store)
     assert load_graph(with_graph)(store) == "module-level"
+
+
+def test_a_crashing_graph_scores_zero_and_shows_in_the_failure_table(tmp_path: Path) -> None:
+    class Crashing:
+        def invoke(self, state: dict[str, Any]) -> dict[str, Any]:
+            raise RuntimeError("boom")
+
+    results = run([scenario_file(tmp_path, "one.jsonl", REFUND)], lambda store: Crashing())
+    report = write_report(results, model="m", effort="e", reports_dir=tmp_path / "reports")
+
+    [result] = next(iter(results.values()))
+    assert set(result.scores.values()) == {0.0}
+    assert "RuntimeError('boom')" in report.read_text().split("## Failed scenarios")[1]

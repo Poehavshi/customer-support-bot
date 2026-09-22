@@ -14,7 +14,7 @@ test:
 	uv run pytest
 
 ## Run the evaluation harness over every scenario file and write a dated report under reports/.
-## GRAPH is the agent module; override with `make eval GRAPH=path/to/graph.py`.
+## GRAPH is the agent module (lands with the Support Agent ticket); override with `make eval GRAPH=...`.
 GRAPH ?= support_agent/agent/graph.py
 eval:
 	uv run python -m support_agent.eval.batch_evaluation --graph_py $(GRAPH) --dataset support_agent/eval/scenarios/*.jsonl
