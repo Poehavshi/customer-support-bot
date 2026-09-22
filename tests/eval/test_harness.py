@@ -179,6 +179,16 @@ def test_per_scenario_progress_is_printed(
     assert "[2/2] modify_2" in out
 
 
+def test_sample_id_glob_selects_which_scenarios_run(tmp_path: Path) -> None:
+    graph = ScriptedGraph([])
+
+    path = scenario_file(tmp_path, "two.jsonl", REFUND, MODIFY)
+
+    results = evaluate_file(path, lambda store: graph, sample_id="modify_*")
+
+    assert [r.scenario_id for r in results] == ["modify_2"]
+
+
 def test_load_graph_prefers_construct_graph_and_falls_back_to_graph(tmp_path: Path) -> None:
     with_construct = tmp_path / "with_construct.py"
     with_construct.write_text("def construct_graph(store):\n    return ('built', store)\n")

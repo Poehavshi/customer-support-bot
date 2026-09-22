@@ -14,10 +14,12 @@ test:
 	uv run pytest
 
 ## Run the evaluation harness over every scenario file and write a dated report under reports/.
-## GRAPH is the agent module (lands with the Support Agent ticket); override with `make eval GRAPH=...`.
+## FILTER is a glob over sample ids; only the plain cancel Scenarios until the other Tools land.
+## Override with `make eval FILTER='*'` or `make eval GRAPH=...`. Needs ANTHROPIC_API_KEY in .env.
 GRAPH ?= support_agent/agent/graph.py
+FILTER ?= cancel_*_cancel
 eval:
-	uv run python -m support_agent.eval.batch_evaluation --graph_py $(GRAPH) --dataset support_agent/eval/scenarios/*.jsonl
+	uv run python -m support_agent.eval.batch_evaluation --graph_py $(GRAPH) --dataset support_agent/eval/scenarios/*.jsonl --sample_id '$(FILTER)'
 
 ## Apply the Order Store schema and upsert the scenario orders plus hand-written extras. Idempotent.
 seed:

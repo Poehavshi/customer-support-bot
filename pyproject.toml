@@ -5,7 +5,9 @@ description = "An LLM-driven support agent that acts on one order and escalates 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "langchain-anthropic>=1.7.2",
     "langchain-core>=1.6.4",
+    "langgraph>=1.2.12",
     "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
 ]

@@ -23,3 +23,17 @@ every order from the book's vendored scenario file plus hand-written orders in `
 and `refunded` status. Tests run the same contract suite against the in-memory store and, when
 `DATABASE_URL` is set, against Postgres. The Postgres tests truncate the `orders` table, so run
 `make seed` again after `make check` if you want the seeded rows back.
+
+## Support Agent and evaluation
+
+The agent is a LangGraph graph over Claude in `support_agent/agent/graph.py`: one model turn, at most
+one tool call, one reply. The order is read from the Order Store and rendered into the system prompt
+along with the rule table in `support_agent/tools/__init__.py`, which the tools enforce. Model and
+effort come from `SUPPORT_AGENT_MODEL` and `SUPPORT_AGENT_EFFORT` in `.env`.
+
+```sh
+make eval                  # the eight plain cancel Scenarios, report under reports/
+make eval FILTER='*'       # every Scenario; refund and modify need Tools that do not exist yet
+```
+
+Eval runs call the API and cost money, so they are run by hand and their reports are committed.
