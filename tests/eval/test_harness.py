@@ -179,12 +179,12 @@ def test_per_scenario_progress_is_printed(
     assert "[2/2] modify_2" in out
 
 
-def test_sample_id_glob_selects_which_scenarios_run(tmp_path: Path) -> None:
+def test_scenario_id_glob_selects_which_scenarios_run(tmp_path: Path) -> None:
     graph = ScriptedGraph([])
 
     path = scenario_file(tmp_path, "two.jsonl", REFUND, MODIFY)
 
-    results = evaluate_file(path, lambda store: graph, sample_id="modify_*")
+    results = evaluate_file(path, lambda store: graph, scenario_id="modify_*")
 
     assert [r.scenario_id for r in results] == ["modify_2"]
 

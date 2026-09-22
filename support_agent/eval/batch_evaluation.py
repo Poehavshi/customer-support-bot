@@ -8,7 +8,7 @@ non-e-commerce branches are gone; several scenario files score per file and comb
 dated markdown report is written.
 
 Run: ``python -m support_agent.eval.batch_evaluation --graph_py GRAPH --dataset FILE [FILE ...]
-[--sample_id GLOB]``
+[--scenario GLOB]``
 """
 
 import argparse
@@ -133,14 +133,14 @@ def evaluate_file(
     path: Path,
     graph_factory: GraphFactory,
     store_factory: StoreFactory = InMemoryOrderStore,
-    sample_id: str = "*",
+    scenario_id: str = "*",
 ) -> list[ScenarioResult]:
-    """Score every Scenario in ``path`` whose sample id matches the ``sample_id`` glob.
+    """Score every Scenario in ``path`` whose sample id matches the ``scenario_id`` glob.
 
     Each Scenario runs against a fresh store seeded with its order.
     """
     scenarios = [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
-    scenarios = [s for s in scenarios if fnmatch.fnmatch(s["sample_id"], sample_id)]
+    scenarios = [s for s in scenarios if fnmatch.fnmatch(s["sample_id"], scenario_id)]
     results: list[ScenarioResult] = []
     for i, scenario in enumerate(scenarios, 1):
         store = store_factory()
@@ -166,9 +166,9 @@ def run(
     files: Iterable[Path],
     graph_factory: GraphFactory,
     store_factory: StoreFactory = InMemoryOrderStore,
-    sample_id: str = "*",
+    scenario_id: str = "*",
 ) -> dict[Path, list[ScenarioResult]]:
-    return {path: evaluate_file(path, graph_factory, store_factory, sample_id) for path in files}
+    return {path: evaluate_file(path, graph_factory, store_factory, scenario_id) for path in files}
 
 
 def combined(results: dict[Path, list[ScenarioResult]]) -> list[ScenarioResult]:
@@ -189,7 +189,7 @@ def write_report(
     effort: str,
     reports_dir: Path = DEFAULT_REPORTS_DIR,
     now: datetime | None = None,
-    sample_id: str = "*",
+    scenario_id: str = "*",
 ) -> Path:
     now = now or datetime.now().astimezone()
     sections = {"Combined": combined(results), **{path.name: rs for path, rs in results.items()}}
@@ -202,7 +202,7 @@ def write_report(
         "- phrase_recall is always 1.0 and task_success floors at 0.5: the book's scenarios "
         "carry no expected phrases.",
         f"- Scenario files: {', '.join(f'`{p}`' for p in results)}",
-        f"- Scenario filter: `{sample_id}`",
+        f"- Scenario filter: `{scenario_id}`",
         "",
         "Scores are comparable with the book's only on the metric definitions, not on what "
         "the agent could see: this harness passes each Scenario's real order into the graph "
@@ -241,13 +241,13 @@ def main() -> None:
     ap.add_argument("--graph_py", required=True, type=Path)
     ap.add_argument("--dataset", required=True, nargs="+", type=Path)
     ap.add_argument("--reports_dir", default=DEFAULT_REPORTS_DIR, type=Path)
-    ap.add_argument("--sample_id", default="*", help="glob over sample ids, e.g. 'cancel_*_cancel'")
+    ap.add_argument("--scenario", default="*", help="glob over Scenario ids, e.g. cancel_*_cancel")
     args = ap.parse_args()
 
     settings = load_settings()
-    results = run(args.dataset, load_graph(args.graph_py), sample_id=args.sample_id)
+    results = run(args.dataset, load_graph(args.graph_py), scenario_id=args.scenario)
     report = write_report(
-        results, settings.model, settings.effort, args.reports_dir, sample_id=args.sample_id
+        results, settings.model, settings.effort, args.reports_dir, scenario_id=args.scenario
     )
 
     print("\n=== Aggregate scores ===")
