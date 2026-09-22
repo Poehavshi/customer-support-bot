@@ -5,6 +5,7 @@ description = "An LLM-driven support agent that acts on one order and escalates 
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "psycopg[binary]>=3.2",
     "python-dotenv>=1.0",
 ]
 
